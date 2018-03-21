@@ -1,0 +1,208 @@
+#include "UFS.h"
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include "disque.h"
+
+char BITMAP_BLOCK[40] = {};
+char BITMAP_INODE[32] = {};
+iNodeEntry BLOCK_INODE[16];
+iNodeEntry BLOCK_DATE[16];
+
+
+// Quelques fonctions qui pourraient vous être utiles
+int NumberofDirEntry(int Size) {
+	return Size/sizeof(DirEntry);
+}
+
+int min(int a, int b) {
+	return a<b ? a : b;
+}
+
+int max(int a, int b) {
+	return a>b ? a : b;
+}
+
+
+/* Cette fonction va extraire le repertoire d'une chemin d'acces complet, et le copier
+   dans pDir.  Par exemple, si le chemin fourni pPath="/doc/tmp/a.txt", cette fonction va
+   copier dans pDir le string "/doc/tmp" . Si le chemin fourni est pPath="/a.txt", la fonction
+   va retourner pDir="/". Si le string fourni est pPath="/", cette fonction va retourner pDir="/".
+   Cette fonction est calquée sur dirname, que je ne conseille pas d'utiliser car elle fait appel
+   à des variables statiques/modifie le string entrant. */
+int GetDirFromPath(const char *pPath, char *pDir) {
+	strcpy(pDir,pPath);
+	int len = strlen(pDir); // length, EXCLUDING null
+	int index;
+
+	// On va a reculons, de la fin au debut
+	while (pDir[len]!='/') {
+		len--;
+		if (len <0) {
+			// Il n'y avait pas de slash dans le pathname
+			return 0;
+		}
+	}
+	if (len==0) {
+		// Le fichier se trouve dans le root!
+		pDir[0] = '/';
+		pDir[1] = 0;
+	}
+	else {
+		// On remplace le slash par une fin de chaine de caractere
+		pDir[len] = '\0';
+	}
+	return 1;
+}
+
+/* Cette fonction va extraire le nom de fichier d'une chemin d'acces complet.
+   Par exemple, si le chemin fourni pPath="/doc/tmp/a.txt", cette fonction va
+   copier dans pFilename le string "a.txt" . La fonction retourne 1 si elle
+   a trouvée le nom de fichier avec succes, et 0 autrement. */
+int GetFilenameFromPath(const char *pPath, char *pFilename) {
+	// Pour extraire le nom de fichier d'un path complet
+	char *pStrippedFilename = strrchr(pPath,'/');
+	if (pStrippedFilename!=NULL) {
+		++pStrippedFilename; // On avance pour passer le slash
+		if ((*pStrippedFilename) != '\0') {
+			// On copie le nom de fichier trouve
+			strcpy(pFilename, pStrippedFilename);
+			return 1;
+		}
+	}
+	return 0;
+}
+
+
+/* Cette fonction sert à afficher à l'écran le contenu d'une structure d'i-node */
+void printiNode(iNodeEntry iNode) {
+	printf("\t\t========= inode %d ===========\n",iNode.iNodeStat.st_ino);
+	printf("\t\t  blocks:%d\n",iNode.iNodeStat.st_blocks);
+	printf("\t\t  size:%d\n",iNode.iNodeStat.st_size);
+	printf("\t\t  mode:0x%x\n",iNode.iNodeStat.st_mode);
+	int index = 0;
+	for (index =0; index < N_BLOCK_PER_INODE; index++) {
+		printf("\t\t      Block[%d]=%d\n",index,iNode.Block[index]);
+	}
+}
+
+
+/* ----------------------------------------------------------------------------------------
+					            à vous de jouer, maintenant!
+   ---------------------------------------------------------------------------------------- */
+
+
+int bd_countfreeblocks(void) {
+	char temp_block[BLOCK_SIZE];
+	int free_block_count = 0;
+	ReadBlock(FREE_BLOCK_BITMAP, temp_block);
+	for (int i = 0; i < N_BLOCK_ON_DISK; i++){
+		if(temp_block[i] != 0){
+			free_block_count += 1;
+		}
+	}
+	return free_block_count;
+}
+
+int bd_stat(const char *pFilename, gstat *pStat) {
+	return -1;
+}
+
+int bd_create(const char *pFilename) {
+	return -1;
+}
+
+int bd_read(const char *pFilename, char *buffer, int offset, int numbytes) {
+	return -1;
+}
+
+int bd_mkdir(const char *pDirName) {
+	return -1;
+}
+
+int bd_write(const char *pFilename, const char *buffer, int offset, int numbytes) { 
+	return -1;
+}
+
+int bd_hardlink(const char *pPathExistant, const char *pPathNouveauLien) {
+	return -1;
+}
+
+int bd_unlink(const char *pFilename) {
+	return -1;
+}
+
+int bd_truncate(const char *pFilename, int NewSize) {
+	return -1;
+}
+
+int bd_rmdir(const char *pFilename) {
+	return -1;
+}
+
+int bd_rename(const char *pFilename, const char *pDestFilename) {
+	return -1;
+}
+
+int bd_readdir(const char *pDirLocation, DirEntry **ppListeFichiers) {
+	return -1;
+}
+
+int bd_symlink(const char *pPathExistant, const char *pPathNouveauLien) {
+    return -1;
+}
+
+int bd_readlink(const char *pPathLien, char *pBuffer, int sizeBuffer) {
+    return -1;
+}
+
+
+/*fonction utilitaires*/
+
+int release_free_block(UNINT16 block_no){
+	char free_block_bitmap[BLOCK_SIZE];
+	ReadBlock(FREE_BLOCK_BITMAP, free_block_bitmap);
+	free_block_bitmap[block_no] = 1;
+	printf("GLOFS: relache bloque: %d\n", block_no);
+	WriteBlock(FREE_BLOCK_BITMAP, free_block_bitmap);
+	return 0;
+}
+
+int acquire_free_block(){
+	char free_block_bitmap[BLOCK_SIZE];
+	ReadBlock(FREE_BLOCK_BITMAP, free_block_bitmap);
+	for (int i = 0; i < N_BLOCK_ON_DISK; i++){
+		if (free_block_bitmap[i] != 0){
+			free_block_bitmap[i] = 0;
+			printf("GLOFS: saisie du bloque: %d\n", i);
+			WriteBlock(FREE_BLOCK_BITMAP, free_block_bitmap);
+			return i;
+		}
+	}
+
+	return -1;
+}
+
+int release_free_inode(UNINT16 inode_no){
+	char free_inode_bitmap[BLOCK_SIZE];
+	ReadBlock(FREE_INODE_BITMAP, free_inode_bitmap);
+	free_inode_bitmap[inode_no] = 0;
+	printf("GLOFS: relache du inode: %d\n", inode_no);
+	WriteBlock(FREE_INODE_BITMAP, free_inode_bitmap);
+	return 0;
+}
+
+int acquire_free_inode(){
+	char free_inode_bitmap[BLOCK_SIZE];
+	ReadBlock(FREE_INODE_BITMAP, free_inode_bitmap);
+	for (int i = 0; i < N_INODE_ON_DISK; i ++){
+		if (free_inode_bitmap[i] != 0){
+			free_inode_bitmap[i] = 0;
+			printf("GLOFS: saisie du inode: %d\n", i);
+			WriteBlock(FREE_INODE_BITMAP, free_block_bitmap);
+			return i;
+		}
+	}
+	return -1;
+}
+
