@@ -4,11 +4,6 @@
 #include <string.h>
 #include "disque.h"
 
-char BITMAP_BLOCK[40] = {};
-char BITMAP_INODE[32] = {};
-iNodeEntry BLOCK_INODE[16];
-iNodeEntry BLOCK_DATE[16];
-
 
 // Quelques fonctions qui pourraient vous être utiles
 int NumberofDirEntry(int Size) {
@@ -91,6 +86,114 @@ void printiNode(iNodeEntry iNode) {
 					            à vous de jouer, maintenant!
    ---------------------------------------------------------------------------------------- */
 
+/*fonction utilitaires*/
+
+/* realease d'un bloque sur le bitmap bloque */ 
+int release_free_block(UINT16 block_no){
+	char free_block_bitmap[BLOCK_SIZE];
+	ReadBlock(FREE_BLOCK_BITMAP, free_block_bitmap);
+	free_block_bitmap[block_no] = 1;
+	printf("GLOFS: relache bloque: %d\n", block_no);
+	WriteBlock(FREE_BLOCK_BITMAP, free_block_bitmap);
+	return -1;
+}
+
+/* allocation d'un bloque sur le bitmap bloque */
+int get_free_block(){
+	char free_block_bitmap[BLOCK_SIZE];
+	ReadBlock(FREE_BLOCK_BITMAP, free_block_bitmap);
+	for (int i = 0; i < N_BLOCK_ON_DISK; i++){
+		if (free_block_bitmap[i] != 0){
+			free_block_bitmap[i] = 0;
+			printf("GLOFS: saisie du bloque: %d\n", i);
+			WriteBlock(FREE_BLOCK_BITMAP, free_block_bitmap);
+			return i;
+		}
+	}
+
+	return -1;
+}
+
+/* release d'un inode sur le bitmap */
+int release_free_inode(UINT16 inode_no){
+	char free_inode_bitmap[BLOCK_SIZE];
+	ReadBlock(FREE_INODE_BITMAP, free_inode_bitmap);
+	free_inode_bitmap[inode_no] = 0;
+	printf("GLOFS: relache du inode: %d\n", inode_no);
+	WriteBlock(FREE_INODE_BITMAP, free_inode_bitmap);
+	return -1;
+}
+
+/* allocation d'un inode sur le inode bitmap */
+int get_free_inode(){
+	char free_inode_bitmap[BLOCK_SIZE];
+	ReadBlock(FREE_INODE_BITMAP, free_inode_bitmap);
+	for (int i = 0; i < N_INODE_ON_DISK; i ++){
+		if (free_inode_bitmap[i] != 0){
+			free_inode_bitmap[i] = 0;
+			printf("GLOFS: saisie du inode: %d\n", i);
+			WriteBlock(FREE_INODE_BITMAP, free_inode_bitmap);
+			return i;
+		}
+	}
+	return -1;
+}
+
+/* get du inode entry selon un numero de inode */
+int get_inode_entry(ino inode_no, iNodeEntry *p_inode_entry){
+	if (inode_no > N_INODE_ON_DISK){
+		return -1; //on ne peut avoir un inode plus grand que le nombre sur le disque 
+	}
+
+	/* on va chercher le iNodeEntry a partir du numero de inode */
+	char block_data[BLOCK_SIZE];
+	UINT16 inode_block_no = BASE_BLOCK_INODE + (inode_no / NUM_INODE_PER_BLOCK); //base block plus le numero de inode diviser par le nombre de inode par bloque pour avoir le bloque number
+	UINT16 inode_offset = inode_no % NUM_INODE_PER_BLOCK; //offset dans la liste sur le bloque
+	ReadBlock(inode_block_no, block_data);
+	iNodeEntry *p_inode_array = (iNodeEntry*) block_data;
+	*p_inode_entry = p_inode_array[inode_offset];
+
+	return 0;
+}
+
+/* get du inode d'un filename/path */
+int get_inode_from_filename(char *p_filename, ino *p_inode){
+	char data_block_dir[BLOCK_SIZE];
+	if (strcmp("/", p_filename) == 0){
+		*p_inode = ROOT_INODE;
+
+		return 0;
+	}
+	else if (strcmp("/", p_filename) != 0){
+		char *sub_path;
+		for (int i = 1; i < strlen(p_filename); i++){
+			printf("%c\n", p_filename[i]);
+			if (p_filename[i] == '/'){
+				sub_path = p_filename + i;
+				printf("%c\n", sub_path);
+				break;
+			}
+			else if ((i + 1) == strlen(p_filename)){
+				
+			}
+		}
+
+		/*
+		int i = 1;
+		while (p_filename[i] != '/' || p_filename[i] != '\0' || i < 10){
+			printf("%c\n", p_filename[i]);
+			i += 1;
+		}
+		printf("%c\n", p_filename + i + 1);
+		*/
+		return 0;
+	}
+
+	return -1;
+}
+
+
+/*fonction a implementees*/
 
 int bd_countfreeblocks(void) {
 	char temp_block[BLOCK_SIZE];
@@ -105,7 +208,19 @@ int bd_countfreeblocks(void) {
 }
 
 int bd_stat(const char *pFilename, gstat *pStat) {
-	return -1;
+	ino inode;
+	iNodeEntry p_inode_entry;
+	if (get_inode_from_filename(pFilename, &inode) != 0){
+		return -1;
+	}
+	if (get_inode_entry(inode, &p_inode_entry) != 0){
+		return -1;
+	}
+
+	*pStat = p_inode_entry.iNodeStat;
+
+
+	return 0;
 }
 
 int bd_create(const char *pFilename) {
@@ -154,55 +269,5 @@ int bd_symlink(const char *pPathExistant, const char *pPathNouveauLien) {
 
 int bd_readlink(const char *pPathLien, char *pBuffer, int sizeBuffer) {
     return -1;
-}
-
-
-/*fonction utilitaires*/
-
-int release_free_block(UNINT16 block_no){
-	char free_block_bitmap[BLOCK_SIZE];
-	ReadBlock(FREE_BLOCK_BITMAP, free_block_bitmap);
-	free_block_bitmap[block_no] = 1;
-	printf("GLOFS: relache bloque: %d\n", block_no);
-	WriteBlock(FREE_BLOCK_BITMAP, free_block_bitmap);
-	return 0;
-}
-
-int acquire_free_block(){
-	char free_block_bitmap[BLOCK_SIZE];
-	ReadBlock(FREE_BLOCK_BITMAP, free_block_bitmap);
-	for (int i = 0; i < N_BLOCK_ON_DISK; i++){
-		if (free_block_bitmap[i] != 0){
-			free_block_bitmap[i] = 0;
-			printf("GLOFS: saisie du bloque: %d\n", i);
-			WriteBlock(FREE_BLOCK_BITMAP, free_block_bitmap);
-			return i;
-		}
-	}
-
-	return -1;
-}
-
-int release_free_inode(UNINT16 inode_no){
-	char free_inode_bitmap[BLOCK_SIZE];
-	ReadBlock(FREE_INODE_BITMAP, free_inode_bitmap);
-	free_inode_bitmap[inode_no] = 0;
-	printf("GLOFS: relache du inode: %d\n", inode_no);
-	WriteBlock(FREE_INODE_BITMAP, free_inode_bitmap);
-	return 0;
-}
-
-int acquire_free_inode(){
-	char free_inode_bitmap[BLOCK_SIZE];
-	ReadBlock(FREE_INODE_BITMAP, free_inode_bitmap);
-	for (int i = 0; i < N_INODE_ON_DISK; i ++){
-		if (free_inode_bitmap[i] != 0){
-			free_inode_bitmap[i] = 0;
-			printf("GLOFS: saisie du inode: %d\n", i);
-			WriteBlock(FREE_INODE_BITMAP, free_block_bitmap);
-			return i;
-		}
-	}
-	return -1;
 }
 
