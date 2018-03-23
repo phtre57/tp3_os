@@ -139,6 +139,8 @@ int get_free_inode(){
 	return -1;
 }
 
+
+
 /* get du inode entry selon un numero de inode */
 int get_inode_entry(ino inode_no, iNodeEntry *p_inode_entry){
 	if (inode_no > N_INODE_ON_DISK){
@@ -156,36 +158,69 @@ int get_inode_entry(ino inode_no, iNodeEntry *p_inode_entry){
 	return 0;
 }
 
-/* get du inode d'un filename/path */
-int get_inode_from_filename(char *p_filename, ino *p_inode){
-	char data_block_dir[BLOCK_SIZE];
+/* get du inode d'un filename/path recursion jusqu'a inode du fichier*/
+int get_inode_from_filename(char *p_filename, ino *p_inode_no){
+	char data_block[BLOCK_SIZE];
+	UINT16 inode_block_no = BASE_BLOCK_INODE + (*p_inode_no / NUM_INODE_PER_BLOCK);
+	ReadBlock(inode_block_no, data_block);
+	iNodeEntry *p_inode_entries = (iNodeEntry*)data_block;
+	UINT16 inode_offset = *p_inode_no % NUM_INODE_PER_BLOCK;
+	UINT16 no_dir_entries_in_block = NumberofDirEntry(p_inode_entries[inode_offset].iNodeStat.st_size);
+	//lecture du bloque du inode pour apres lire les dir entries
+	ReadBlock(p_inode_entries[inode_offset].Block[0], data_block);
+	DirEntry *p_dir_entries = (DirEntry*)data_block;
+
+	//root case
 	if (strcmp("/", p_filename) == 0){
-		*p_inode = ROOT_INODE;
+		*p_inode_no = ROOT_INODE;
 
 		return 0;
 	}
+
+	//other cases
 	else if (strcmp("/", p_filename) != 0){
 		char *sub_path;
+		char temp_path[FILENAME_SIZE];
 		for (int i = 1; i < strlen(p_filename); i++){
-			printf("%c\n", p_filename[i]);
+			temp_path[i-1] = p_filename[i];
+			//not las dir to check inode
 			if (p_filename[i] == '/'){
+				printf("filename: %s\n", p_filename);
+				temp_path[i-1] = '\0';
 				sub_path = p_filename + i;
-				printf("%c\n", sub_path);
-				break;
+				for (size_t j = 0; j < no_dir_entries_in_block; j++){
+					printf("there");
+					printf("temp: %s\n", temp_path);
+					printf("dir: %s\n", p_dir_entries[j].Filename);
+					if (strcmp(temp_path, p_dir_entries[j].Filename) == 0){
+						*p_inode_no = p_dir_entries[j].iNode;
+						printf("found inode no of path: %d\n", *p_inode_no);
+						printf("sub_path %s\n", sub_path);
+						get_inode_from_filename(sub_path, p_inode_no);
+						break;
+					}
+				}
 			}
-			else if ((i + 1) == strlen(p_filename)){
+			//last path to check in dir of block
+			if ((i + 1) == strlen(p_filename)){
+				printf("filename: %s\n", p_filename);
+				temp_path[i] = '\0';
+				for (size_t j = 0; j < no_dir_entries_in_block; j++){
+					printf("here");
+					printf("temp: %s\n", temp_path);
+					printf("dir: %s\n", p_dir_entries[j].Filename);
+					if (strcmp(temp_path, p_dir_entries[j].Filename) == 0){
+						*p_inode_no = p_dir_entries[j].iNode;
+						printf("found inode no of path: %d\n", *p_inode_no);
+						return 0;
+					}
+				}
+			}
+			//not last dir check node to read block
+			else{
 				
 			}
 		}
-
-		/*
-		int i = 1;
-		while (p_filename[i] != '/' || p_filename[i] != '\0' || i < 10){
-			printf("%c\n", p_filename[i]);
-			i += 1;
-		}
-		printf("%c\n", p_filename + i + 1);
-		*/
 		return 0;
 	}
 
@@ -208,7 +243,7 @@ int bd_countfreeblocks(void) {
 }
 
 int bd_stat(const char *pFilename, gstat *pStat) {
-	ino inode;
+	ino inode = ROOT_INODE;
 	iNodeEntry p_inode_entry;
 	if (get_inode_from_filename(pFilename, &inode) != 0){
 		return -1;
