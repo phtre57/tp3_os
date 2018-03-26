@@ -193,7 +193,7 @@ int get_sub_path(char *p_path, char *sub_path){
 		}
 	}
 
-	printf("sub there: %s\n", sub_path);
+	//printf("sub there: %s\n", sub_path);
 	return 0;
 }
 
@@ -211,7 +211,7 @@ int get_inode_from_filename(char *p_filename, ino *p_inode_no){
 	else if (strcmp("/", p_filename) != 0){
 		char *sub_path = malloc(sizeof(char) * FILENAME_SIZE);
 		char *temp_path = malloc(sizeof(char) * FILENAME_SIZE);
-		printf("filename: %s\n", p_filename);
+		//printf("filename: %s\n", p_filename);
 		int counter = 0;
 		for (int i = 1; i < strlen(p_filename); i++){
 			if (p_filename[i] != '/'){
@@ -219,18 +219,24 @@ int get_inode_from_filename(char *p_filename, ino *p_inode_no){
 			}
 			//not las dir to check inode
 			if (p_filename[i] == '/'){
-				printf("here \n");
+				//printf("here \n");
 				if (counter > 0){
 					char *temp_sub_path = malloc(sizeof(char) * FILENAME_SIZE);
 					get_sub_path(sub_path, temp_sub_path);
-					printf("sub here: %s\n", temp_sub_path);
+					//printf("sub here: %s\n", temp_sub_path);
 					*p_inode_no = read_inode_dir(*p_inode_no, temp_sub_path);
-					free(temp_sub_path);
+					if (*p_inode_no == -1){
+						return -1;
+					}
+					free(temp_sub_path); //free here works
 					sub_path = p_filename + i + 1;
 				}
 				else{
 					sub_path = p_filename + i + 1;
 					*p_inode_no = read_inode_dir(*p_inode_no, temp_path);
+					if (*p_inode_no == -1){
+						return -1;
+					}
 				}
 				
 				counter++;
@@ -238,23 +244,27 @@ int get_inode_from_filename(char *p_filename, ino *p_inode_no){
 
 			//last dir to check
 			else if ((i + 1) == strlen(p_filename)){
-				printf("there \n");
+				//printf("there \n");
 				if (counter > 0){
 					*p_inode_no = read_inode_dir(*p_inode_no, sub_path);
-					printf("child file1: %d\n", *p_inode_no);
+					if (*p_inode_no == -1){
+						return -1;
+					}
+					//printf("child file1: %d\n", *p_inode_no);
 				}
 				else{
 					*p_inode_no = read_inode_dir(*p_inode_no, temp_path);
-					printf("child file2: %d\n", *p_inode_no);
+					if (*p_inode_no == -1){
+						return -1;
+					}
+					//printf("child file2: %d\n", *p_inode_no);
 				}
 				break;
 			}
 
-			printf("temp: %s\n", temp_path);
-			printf("i: %d\n", i);
 		}
 
-		printf("freeing\n");
+		//memory leak but seg fault when freeing?
 		//free(temp_path);
 		//free(sub_path);
 		return 0;
@@ -312,6 +322,12 @@ int bd_write(const char *pFilename, const char *buffer, int offset, int numbytes
 }
 
 int bd_hardlink(const char *pPathExistant, const char *pPathNouveauLien) {
+	ino inode_exist = ROOT_INODE;
+	ino inode_new = ROOT_INODE;
+	get_inode_from_filename(pPathExistant, &inode_exist);
+
+	
+	//get_inode_from_filename(pPathNouveauLien, &inode_new);
 	return -1;
 }
 
