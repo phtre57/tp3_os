@@ -182,6 +182,21 @@ int read_inode_dir(ino parent_inode, char *sub_path){
 	return -1;
 }
 
+int get_sub_path(char *p_path, char *sub_path){
+	for (int i = 0; i < strlen(p_path); i++){
+		if (p_path[i] != '/'){
+			sub_path[i] = p_path[i];
+		}
+		else if (p_path[i] == '/'){
+			sub_path[i] = '\0';
+			break;
+		}
+	}
+
+	printf("sub there: %s\n", sub_path);
+	return 0;
+}
+
 
 int get_inode_from_filename(char *p_filename, ino *p_inode_no){
 	ino *child_inode = p_inode_no;
@@ -194,8 +209,8 @@ int get_inode_from_filename(char *p_filename, ino *p_inode_no){
 
 	//other cases
 	else if (strcmp("/", p_filename) != 0){
-		char *sub_path;
-		char temp_path[FILENAME_SIZE];
+		char *sub_path = malloc(sizeof(char) * FILENAME_SIZE);
+		char *temp_path = malloc(sizeof(char) * FILENAME_SIZE);
 		printf("filename: %s\n", p_filename);
 		int counter = 0;
 		for (int i = 1; i < strlen(p_filename); i++){
@@ -205,11 +220,16 @@ int get_inode_from_filename(char *p_filename, ino *p_inode_no){
 			//not las dir to check inode
 			if (p_filename[i] == '/'){
 				printf("here \n");
-				sub_path = p_filename + i + 1;
 				if (counter > 0){
-					
+					char *temp_sub_path = malloc(sizeof(char) * FILENAME_SIZE);
+					get_sub_path(sub_path, temp_sub_path);
+					printf("sub here: %s\n", temp_sub_path);
+					*p_inode_no = read_inode_dir(*p_inode_no, temp_sub_path);
+					free(temp_sub_path);
+					sub_path = p_filename + i + 1;
 				}
 				else{
+					sub_path = p_filename + i + 1;
 					*p_inode_no = read_inode_dir(*p_inode_no, temp_path);
 				}
 				
@@ -227,13 +247,17 @@ int get_inode_from_filename(char *p_filename, ino *p_inode_no){
 					*p_inode_no = read_inode_dir(*p_inode_no, temp_path);
 					printf("child file2: %d\n", *p_inode_no);
 				}
-				
-				return 0;
+				break;
 			}
 
 			printf("temp: %s\n", temp_path);
 			printf("i: %d\n", i);
 		}
+
+		printf("freeing\n");
+		//free(temp_path);
+		//free(sub_path);
+		return 0;
 
 	}
 
