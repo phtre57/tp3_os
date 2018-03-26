@@ -54,6 +54,20 @@ int GetDirFromPath(const char *pPath, char *pDir) {
    Par exemple, si le chemin fourni pPath="/doc/tmp/a.txt", cette fonction va
    copier dans pFilename le string "a.txt" . La fonction retourne 1 si elle
    a trouvée le nom de fichier avec succes, et 0 autrement. */
+int GetFilenameFromPathWithSlash(const char *pPath, char *pFilename) {
+	// Pour extraire le nom de fichier d'un path complet
+	char *pStrippedFilename = strrchr(pPath,'/');
+	if (pStrippedFilename!=NULL) {
+		//++pStrippedFilename; // On avance pour passer le slash, on veut garder le slash puisque notre code traite deja le slash
+		if ((*pStrippedFilename) != '\0') {
+			// On copie le nom de fichier trouve
+			strcpy(pFilename, pStrippedFilename);
+			return 1;
+		}
+	}
+	return 0;
+}
+
 int GetFilenameFromPath(const char *pPath, char *pFilename) {
 	// Pour extraire le nom de fichier d'un path complet
 	char *pStrippedFilename = strrchr(pPath,'/');
@@ -158,6 +172,16 @@ int get_inode_entry(ino inode_no, iNodeEntry *p_inode_entry){
 	return 0;
 }
 
+int write_inode_on_block(iNodeEntry *p_entries){
+	char data_block[BLOCK_SIZE];
+	UINT16 block_no = BASE_BLOCK_INODE + (p_entries->iNodeStat.st_ino / NUM_INODE_PER_BLOCK);
+	UINT16 inode_offset = p_entries->iNodeStat.st_ino % NUM_INODE_PER_BLOCK;
+	ReadBlock(block_no, data_block);
+	iNodeEntry *block_entries = (iNodeEntry*)data_block;
+	p_entries[inode_offset] = *p_entries;
+	WriteBlock(block_no, data_block);
+}
+
 //read inode and return the child inode associated with dir
 int read_inode_dir(ino parent_inode, char *sub_path){
 	char data_block[BLOCK_SIZE];
@@ -189,16 +213,16 @@ int get_sub_path(char *p_path, char *sub_path){
 		}
 		else if (p_path[i] == '/'){
 			sub_path[i] = '\0';
-			break;
+			return 0;
 		}
 	}
 
 	//printf("sub there: %s\n", sub_path);
-	return 0;
+	return -1;
 }
 
 
-int get_inode_from_filename(char *p_filename, ino *p_inode_no){
+int get_inode_from_filename(const char *p_filename, ino *p_inode_no){
 	ino *child_inode = p_inode_no;
 	ino parent = *p_inode_no;
 	//root case
@@ -219,7 +243,7 @@ int get_inode_from_filename(char *p_filename, ino *p_inode_no){
 			}
 			//not las dir to check inode
 			if (p_filename[i] == '/'){
-				//printf("here \n");
+				printf("here \n");
 				if (counter > 0){
 					char *temp_sub_path = malloc(sizeof(char) * FILENAME_SIZE);
 					get_sub_path(sub_path, temp_sub_path);
@@ -244,7 +268,7 @@ int get_inode_from_filename(char *p_filename, ino *p_inode_no){
 
 			//last dir to check
 			else if ((i + 1) == strlen(p_filename)){
-				//printf("there \n");
+				printf("there \n");
 				if (counter > 0){
 					*p_inode_no = read_inode_dir(*p_inode_no, sub_path);
 					if (*p_inode_no == -1){
@@ -274,6 +298,10 @@ int get_inode_from_filename(char *p_filename, ino *p_inode_no){
 	return -1;
 }
 
+int add_filename_in_directory(){
+
+}
+
 
 /*fonction a implementees*/
 
@@ -301,12 +329,54 @@ int bd_stat(const char *pFilename, gstat *pStat) {
 
 	*pStat = p_inode_entry.iNodeStat;
 
-
 	return 0;
 }
 
 int bd_create(const char *pFilename) {
-	return -1;
+	char dir[BLOCK_SIZE];
+	char filename[FILENAME_SIZE];
+	ino inode_dir = ROOT_INODE;
+	ino last_inode_found = ROOT_INODE;
+
+	GetDirFromPath(pFilename, dir);
+	GetFilenameFromPathWithSlash(pFilename, filename);
+	get_inode_from_filename(dir, &inode_dir); //get inode of dir
+	last_inode_found = inode_dir; //next step erase inode_dir we need a backup
+	if (inode_dir == -1){
+		return -1;
+	}
+	get_inode_from_filename(filename, &inode_dir); //get inode of filename in dir
+	if (inode_dir != -1){
+		return -2;
+	} 
+
+	char inode_data[BLOCK_SIZE];
+	UINT16 inode_block_no = BASE_BLOCK_INODE + (last_inode_found / NUM_INODE_PER_BLOCK);
+	UINT16 inode_offset = last_inode_found % NUM_INODE_PER_BLOCK;
+	ReadBlock(inode_block_no, inode_data);
+	iNodeEntry *p_inode_entries = (iNodeEntry*)inode_data;
+	if (p_inode_entries[inode_offset].iNodeStat.st_size == 256){
+		return -4;
+	}
+
+	GetFilenameFromPath(pFilename, filename);
+	inode_dir = get_free_inode();
+	iNodeEntry inode_entries;
+	get_inode_entry(inode_dir, &inode_entries);
+	inode_entries.iNodeStat.st_size = 0;
+	inode_entries.iNodeStat.st_nlink = 1;
+	inode_entries.iNodeStat.st_blocks = 0;
+	inode_entries.iNodeStat.st_ino = inode_dir;
+	inode_entries.iNodeStat.st_mode = G_IFREG;
+	inode_entries.iNodeStat.st_mode = inode_entries.iNodeStat.st_mode | G_IRUSR | G_IWUSR | G_IRGRP | G_IWGRP;
+	write_inode_on_block(&inode_entries);
+	iNodeEntry inode_dir_entries;
+	get_inode_entry(last_inode_found, &inode_dir_entries);
+
+
+
+
+	return 0;
 }
 
 int bd_read(const char *pFilename, char *buffer, int offset, int numbytes) {
@@ -325,9 +395,7 @@ int bd_hardlink(const char *pPathExistant, const char *pPathNouveauLien) {
 	ino inode_exist = ROOT_INODE;
 	ino inode_new = ROOT_INODE;
 	get_inode_from_filename(pPathExistant, &inode_exist);
-
-	
-	//get_inode_from_filename(pPathNouveauLien, &inode_new);
+	get_inode_from_filename(pPathNouveauLien, &inode_new);
 	return -1;
 }
 
