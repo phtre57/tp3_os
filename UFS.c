@@ -132,7 +132,7 @@ int get_free_block(){
 int release_free_inode(UINT16 inode_no){
 	char free_inode_bitmap[BLOCK_SIZE];
 	ReadBlock(FREE_INODE_BITMAP, free_inode_bitmap);
-	free_inode_bitmap[inode_no] = 0;
+	free_inode_bitmap[inode_no] = 1;
 	printf("GLOFS: relache du inode: %d\n", inode_no);
 	WriteBlock(FREE_INODE_BITMAP, free_inode_bitmap);
 	return -1;
@@ -180,6 +180,7 @@ int write_inode_on_block(iNodeEntry *p_entries){
 	iNodeEntry *block_entries = (iNodeEntry*)data_block;
 	p_entries[inode_offset] = *p_entries;
 	WriteBlock(block_no, data_block);
+	return 0;
 }
 
 //read inode and return the child inode associated with dir
@@ -298,8 +299,19 @@ int get_inode_from_filename(const char *p_filename, ino *p_inode_no){
 	return -1;
 }
 
-int add_filename_in_directory(){
-
+int add_filename_in_directory(char *filename, iNodeEntry* p_inode_entry, ino inode_no){
+	char data_block[BLOCK_SIZE];
+	p_inode_entry->iNodeStat.st_size += sizeof(DirEntry);
+	write_inode_on_block(p_inode_entry);
+	UINT16 size = p_inode_entry->iNodeStat.st_size;
+	int no_of_entries = NumberofDirEntry(size);
+	UINT16 block_no = p_inode_entry->Block[0];
+	ReadBlock(block_no, data_block);
+	DirEntry *p_dir_entries = (DirEntry*)data_block;
+	p_dir_entries += no_of_entries - 1;
+	p_dir_entries->iNode = inode_no;
+	strcpy(p_dir_entries->Filename, filename);
+	WriteBlock(block_no, data_block);
 }
 
 
@@ -329,12 +341,13 @@ int bd_stat(const char *pFilename, gstat *pStat) {
 
 	*pStat = p_inode_entry.iNodeStat;
 
+
 	return 0;
 }
 
 int bd_create(const char *pFilename) {
-	char dir[BLOCK_SIZE];
-	char filename[FILENAME_SIZE];
+	char *dir = malloc(sizeof(char)*BLOCK_SIZE);
+	char *filename = malloc(sizeof(char)*FILENAME_SIZE);
 	ino inode_dir = ROOT_INODE;
 	ino last_inode_found = ROOT_INODE;
 
@@ -372,9 +385,10 @@ int bd_create(const char *pFilename) {
 	write_inode_on_block(&inode_entries);
 	iNodeEntry inode_dir_entries;
 	get_inode_entry(last_inode_found, &inode_dir_entries);
+	add_filename_in_directory(filename, &inode_dir_entries, inode_dir);
 
-
-
+	free(dir);
+	free(filename);
 
 	return 0;
 }
