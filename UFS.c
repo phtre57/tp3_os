@@ -182,7 +182,7 @@ int read_inode_dir(ino parent_inode, char *sub_path){
 	return -1;
 }
 
-/* get du inode d'un filename/path recursion jusqu'a inode du fichier*/
+
 int get_inode_from_filename(char *p_filename, ino *p_inode_no){
 	ino *child_inode = p_inode_no;
 	ino parent = *p_inode_no;
@@ -199,32 +199,42 @@ int get_inode_from_filename(char *p_filename, ino *p_inode_no){
 		printf("filename: %s\n", p_filename);
 		int counter = 0;
 		for (int i = 1; i < strlen(p_filename); i++){
-			temp_path[i-1] = p_filename[i];
+			if (p_filename[i] != '/'){
+				temp_path[i-1] = p_filename[i];
+			}
 			//not las dir to check inode
 			if (p_filename[i] == '/'){
 				printf("here \n");
-				temp_path[i-1] = '\0';
 				sub_path = p_filename + i + 1;
-				*p_inode_no = read_inode_dir(*p_inode_no, temp_path);
+				if (counter > 0){
+					
+				}
+				else{
+					*p_inode_no = read_inode_dir(*p_inode_no, temp_path);
+				}
+				
 				counter++;
 			}
 
 			//last dir to check
 			else if ((i + 1) == strlen(p_filename)){
 				printf("there \n");
-				temp_path[i] = '\0';
 				if (counter > 0){
 					*p_inode_no = read_inode_dir(*p_inode_no, sub_path);
 					printf("child file1: %d\n", *p_inode_no);
 				}
 				else{
 					*p_inode_no = read_inode_dir(*p_inode_no, temp_path);
-					printf("child file1: %d\n", *p_inode_no);
+					printf("child file2: %d\n", *p_inode_no);
 				}
 				
 				return 0;
 			}
+
+			printf("temp: %s\n", temp_path);
+			printf("i: %d\n", i);
 		}
+
 	}
 
 	return -1;
