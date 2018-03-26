@@ -158,22 +158,37 @@ int get_inode_entry(ino inode_no, iNodeEntry *p_inode_entry){
 	return 0;
 }
 
-/* get du inode d'un filename/path recursion jusqu'a inode du fichier*/
-int get_inode_from_filename(char *p_filename, ino *p_inode_no){
+//read inode and return the child inode associated with dir
+int read_inode_dir(ino parent_inode, char *sub_path){
 	char data_block[BLOCK_SIZE];
-	UINT16 inode_block_no = BASE_BLOCK_INODE + (*p_inode_no / NUM_INODE_PER_BLOCK);
+	UINT16 inode_block_no = BASE_BLOCK_INODE + (parent_inode / NUM_INODE_PER_BLOCK);
 	ReadBlock(inode_block_no, data_block);
 	iNodeEntry *p_inode_entries = (iNodeEntry*)data_block;
-	UINT16 inode_offset = *p_inode_no % NUM_INODE_PER_BLOCK;
+	UINT16 inode_offset = parent_inode % NUM_INODE_PER_BLOCK;
 	UINT16 no_dir_entries_in_block = NumberofDirEntry(p_inode_entries[inode_offset].iNodeStat.st_size);
 	//lecture du bloque du inode pour apres lire les dir entries
 	ReadBlock(p_inode_entries[inode_offset].Block[0], data_block);
-	DirEntry *p_dir_entries = (DirEntry*)data_block;
+	DirEntry *p_dir_entries = (DirEntry*)data_block;	
 
+	for (int i = 0; i < no_dir_entries_in_block; i++){
+		printf("dir: %s\n", p_dir_entries[i].Filename);
+		printf("sub: %s\n", sub_path);
+		if (strcmp(sub_path, p_dir_entries[i].Filename) == 0){
+			printf("child read: %d\n", p_dir_entries[i].iNode);
+			return p_dir_entries[i].iNode;
+		}
+	}
+
+	return -1;
+}
+
+/* get du inode d'un filename/path recursion jusqu'a inode du fichier*/
+int get_inode_from_filename(char *p_filename, ino *p_inode_no){
+	ino *child_inode = p_inode_no;
+	ino parent = *p_inode_no;
 	//root case
 	if (strcmp("/", p_filename) == 0){
 		*p_inode_no = ROOT_INODE;
-
 		return 0;
 	}
 
@@ -181,47 +196,35 @@ int get_inode_from_filename(char *p_filename, ino *p_inode_no){
 	else if (strcmp("/", p_filename) != 0){
 		char *sub_path;
 		char temp_path[FILENAME_SIZE];
+		printf("filename: %s\n", p_filename);
+		int counter = 0;
 		for (int i = 1; i < strlen(p_filename); i++){
 			temp_path[i-1] = p_filename[i];
 			//not las dir to check inode
 			if (p_filename[i] == '/'){
-				printf("filename: %s\n", p_filename);
+				printf("here \n");
 				temp_path[i-1] = '\0';
-				sub_path = p_filename + i;
-				for (size_t j = 0; j < no_dir_entries_in_block; j++){
-					printf("there");
-					printf("temp: %s\n", temp_path);
-					printf("dir: %s\n", p_dir_entries[j].Filename);
-					if (strcmp(temp_path, p_dir_entries[j].Filename) == 0){
-						*p_inode_no = p_dir_entries[j].iNode;
-						printf("found inode no of path: %d\n", *p_inode_no);
-						printf("sub_path %s\n", sub_path);
-						get_inode_from_filename(sub_path, p_inode_no);
-						break;
-					}
-				}
+				sub_path = p_filename + i + 1;
+				*p_inode_no = read_inode_dir(*p_inode_no, temp_path);
+				counter++;
 			}
-			//last path to check in dir of block
-			if ((i + 1) == strlen(p_filename)){
-				printf("filename: %s\n", p_filename);
+
+			//last dir to check
+			else if ((i + 1) == strlen(p_filename)){
+				printf("there \n");
 				temp_path[i] = '\0';
-				for (size_t j = 0; j < no_dir_entries_in_block; j++){
-					printf("here");
-					printf("temp: %s\n", temp_path);
-					printf("dir: %s\n", p_dir_entries[j].Filename);
-					if (strcmp(temp_path, p_dir_entries[j].Filename) == 0){
-						*p_inode_no = p_dir_entries[j].iNode;
-						printf("found inode no of path: %d\n", *p_inode_no);
-						return 0;
-					}
+				if (counter > 0){
+					*p_inode_no = read_inode_dir(*p_inode_no, sub_path);
+					printf("child file1: %d\n", *p_inode_no);
 				}
-			}
-			//not last dir check node to read block
-			else{
+				else{
+					*p_inode_no = read_inode_dir(*p_inode_no, temp_path);
+					printf("child file1: %d\n", *p_inode_no);
+				}
 				
+				return 0;
 			}
 		}
-		return 0;
 	}
 
 	return -1;
