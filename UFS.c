@@ -664,8 +664,11 @@ int bd_unlink(const char *pFilename) {
 }
 
 int bd_truncate(const char *pFilename, int NewSize) {
+	if (NewSize > MAX_FILE_SIZE){
+		NewSize = MAX_FILE_SIZE;
+	}
 	ino inode_found = ROOT_INODE;
-	get_inode_from_filename(pFilename, inode_found);
+	get_inode_from_filename(pFilename, &inode_found);
 	if (inode_found == -1){
 		return -1;
 	}
@@ -676,8 +679,13 @@ int bd_truncate(const char *pFilename, int NewSize) {
 		return -2;
 	}
 
-	
-	return 0;
+	if (NewSize == 0){
+		release_free_block(inode_entry.Block[0]);
+	}
+	inode_entry.iNodeStat.st_size = NewSize;
+	write_inode_on_block(&inode_entry);
+
+	return inode_entry.iNodeStat.st_size;
 }
 
 int bd_rmdir(const char *pFilename) {
