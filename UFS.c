@@ -116,16 +116,18 @@ int release_free_block(UINT16 block_no){
 int get_free_block(){
 	char free_block_bitmap[BLOCK_SIZE];
 	ReadBlock(FREE_BLOCK_BITMAP, free_block_bitmap);
-	for (int i = 0; i < N_BLOCK_ON_DISK; i++){
-		if (free_block_bitmap[i] != 0){
-			free_block_bitmap[i] = 0;
-			printf("GLOFS: saisie du bloque: %d\n", i);
-			WriteBlock(FREE_BLOCK_BITMAP, free_block_bitmap);
-			return i;
-		}
+	int i = BASE_BLOCK_INODE + (N_INODE_ON_DISK / NUM_INODE_PER_BLOCK);
+	while (i < N_BLOCK_ON_DISK && free_block_bitmap[i] == 0){
+		i++;
 	}
+	if (i > N_BLOCK_ON_DISK){
+		return -1;
+	}
+	free_block_bitmap[i] = 0;
+	printf("GlOFS saisie bloque: %d\n", i);
+	WriteBlock(FREE_BLOCK_BITMAP, free_block_bitmap);
+	return i;
 
-	return -1;
 }
 
 /* release d'un inode sur le bitmap */
@@ -142,15 +144,24 @@ int release_free_inode(UINT16 inode_no){
 int get_free_inode(){
 	char free_inode_bitmap[BLOCK_SIZE];
 	ReadBlock(FREE_INODE_BITMAP, free_inode_bitmap);
-	for (int i = 0; i < N_INODE_ON_DISK; i ++){
-		if (free_inode_bitmap[i] != 0){
-			free_inode_bitmap[i] = 0;
-			printf("GLOFS: saisie du inode: %d\n", i);
-			WriteBlock(FREE_INODE_BITMAP, free_inode_bitmap);
-			return i;
-		}
+	int i = 0;
+	int test = 0;
+	while (test < N_INODE_ON_DISK){
+		printf("i: %d ", test);
+		printf("bitmap inode %d\n", free_inode_bitmap[i]);
+		test++;
 	}
-	return -1;
+	while (i < N_INODE_ON_DISK && free_inode_bitmap[i] == 0){
+		i++;
+	}
+	if (i > N_INODE_ON_DISK){
+		return -1;
+	}
+	free_inode_bitmap[i] = 0;
+	printf("GlOFS saisie inode: %d\n", i);
+	WriteBlock(FREE_INODE_BITMAP, free_inode_bitmap);
+	return i;
+	
 }
 
 
@@ -178,7 +189,7 @@ int write_inode_on_block(iNodeEntry *p_entries){
 	UINT16 inode_offset = p_entries->iNodeStat.st_ino % NUM_INODE_PER_BLOCK;
 	ReadBlock(block_no, data_block);
 	iNodeEntry *block_entries = (iNodeEntry*)data_block;
-	p_entries[inode_offset] = *p_entries;
+	block_entries[inode_offset] = *p_entries;
 	WriteBlock(block_no, data_block);
 	return 0;
 }
@@ -196,10 +207,10 @@ int read_inode_dir(ino parent_inode, char *sub_path){
 	DirEntry *p_dir_entries = (DirEntry*)data_block;	
 
 	for (int i = 0; i < no_dir_entries_in_block; i++){
-		printf("dir: %s\n", p_dir_entries[i].Filename);
-		printf("sub: %s\n", sub_path);
+		//printf("dir: %s\n", p_dir_entries[i].Filename);
+		//printf("sub: %s\n", sub_path);
 		if (strcmp(sub_path, p_dir_entries[i].Filename) == 0){
-			printf("child read: %d\n", p_dir_entries[i].iNode);
+			//printf("child read: %d\n", p_dir_entries[i].iNode);
 			return p_dir_entries[i].iNode;
 		}
 	}
@@ -244,7 +255,7 @@ int get_inode_from_filename(const char *p_filename, ino *p_inode_no){
 			}
 			//not las dir to check inode
 			if (p_filename[i] == '/'){
-				printf("here \n");
+				//printf("here \n");
 				if (counter > 0){
 					char *temp_sub_path = malloc(sizeof(char) * FILENAME_SIZE);
 					get_sub_path(sub_path, temp_sub_path);
@@ -257,6 +268,7 @@ int get_inode_from_filename(const char *p_filename, ino *p_inode_no){
 					sub_path = p_filename + i + 1;
 				}
 				else{
+					temp_path[i-1] = '\0';
 					sub_path = p_filename + i + 1;
 					*p_inode_no = read_inode_dir(*p_inode_no, temp_path);
 					if (*p_inode_no == -1){
@@ -269,7 +281,7 @@ int get_inode_from_filename(const char *p_filename, ino *p_inode_no){
 
 			//last dir to check
 			else if ((i + 1) == strlen(p_filename)){
-				printf("there \n");
+				//printf("there \n");
 				if (counter > 0){
 					*p_inode_no = read_inode_dir(*p_inode_no, sub_path);
 					if (*p_inode_no == -1){
@@ -278,6 +290,7 @@ int get_inode_from_filename(const char *p_filename, ino *p_inode_no){
 					//printf("child file1: %d\n", *p_inode_no);
 				}
 				else{
+					temp_path[i] = '\0';
 					*p_inode_no = read_inode_dir(*p_inode_no, temp_path);
 					if (*p_inode_no == -1){
 						return -1;
@@ -306,16 +319,13 @@ int add_filename_in_directory(char *filename, iNodeEntry* p_inode_entry, ino ino
 	UINT16 size = p_inode_entry->iNodeStat.st_size;
 	int no_of_entries = NumberofDirEntry(size);
 	UINT16 block_no = p_inode_entry->Block[0];
-	printf("block no: %d\n", p_inode_entry->Block[0]);
+	//printf("block no: %d\n", p_inode_entry->Block[0]);
 	ReadBlock(block_no, data_block);
 	DirEntry *p_dir_entries = (DirEntry*)data_block;
 	p_dir_entries[no_of_entries - 1].iNode = inode_no;
 	strcpy(p_dir_entries[no_of_entries - 1].Filename, filename);
-	/*
-	for (int i = 0; i < no_of_entries; i++){
-		printf("dir in block: %s\n", p_dir_entries[i].Filename);
-	}
-	*/
+	
+	
 	//printf("dir entry %s\n", p_dir_entries->Filename);
 	WriteBlock(block_no, data_block);
 
@@ -376,7 +386,7 @@ int bd_create(const char *pFilename) {
 	UINT16 inode_offset = last_inode_found % NUM_INODE_PER_BLOCK;
 	ReadBlock(inode_block_no, inode_data);
 	iNodeEntry *p_inode_entries = (iNodeEntry*)inode_data;
-	if (p_inode_entries[inode_offset].iNodeStat.st_size == 256){
+	if (p_inode_entries[inode_offset].iNodeStat.st_size >= BLOCK_SIZE){
 		return -4;
 	}
 
@@ -414,15 +424,166 @@ int bd_create(const char *pFilename) {
 }
 
 int bd_read(const char *pFilename, char *buffer, int offset, int numbytes) {
-	return -1;
+	ino inode_found = ROOT_INODE;
+	char *dir = malloc(sizeof(char)*BLOCK_SIZE);
+	GetDirFromPath(pFilename, dir);
+
+	get_inode_from_filename(pFilename, &inode_found);
+	if (inode_found == -1){
+		return -1;
+	}
+
+	iNodeEntry p_inode_entry;
+	get_inode_entry(inode_found, &p_inode_entry);
+
+	if (p_inode_entry.iNodeStat.st_mode & G_IFDIR){
+		return -2;
+	}
+
+	if (offset >= p_inode_entry.iNodeStat.st_size){
+		return 0;
+	}
+
+	char file_data[BLOCK_SIZE];
+	ReadBlock(p_inode_entry.Block[0], file_data);
+
+	int bytes = 0;
+	for (int i = offset; i < (offset + numbytes) && i < p_inode_entry.iNodeStat.st_size; i++){
+		buffer[bytes] = file_data[i];
+		bytes++;
+	}
+
+	free(dir);
+	return bytes;;
 }
 
 int bd_mkdir(const char *pDirName) {
-	return -1;
+	char *last_dir = malloc(sizeof(char)*FILENAME_SIZE);
+	char *path = malloc(sizeof(char)*BLOCK_SIZE);
+	ino inode_found = ROOT_INODE;
+	GetDirFromPath(pDirName, path);
+	GetFilenameFromPath(pDirName, last_dir);
+
+	if (strcmp(last_dir, "") == 0){
+		return -3;
+	}
+
+	get_inode_from_filename(pDirName, &inode_found);
+	if (inode_found != -1){
+		return -2;
+	}
+
+	inode_found = ROOT_INODE;
+	get_inode_from_filename(path, &inode_found);
+	if (inode_found == -1){
+		return -1;
+	}
+
+	iNodeEntry parent_inode_entry;
+	get_inode_entry(inode_found, &parent_inode_entry);
+
+	if (parent_inode_entry.iNodeStat.st_size >= BLOCK_SIZE){
+		return -4;
+	}
+
+	ino child_inode_no = get_free_inode();
+	int child_inode_block_no = get_free_block();
+	
+	parent_inode_entry.iNodeStat.st_nlink += 1;
+	write_inode_on_block(&parent_inode_entry);
+	add_filename_in_directory(last_dir, &parent_inode_entry, child_inode_no);
+
+	/* gets written well but when ls is launch no dir appears same with create
+	char inode_data[BLOCK_SIZE];
+	UINT16 size = parent_inode_entry.iNodeStat.st_size;
+	int no_of_entries = NumberofDirEntry(size);
+	UINT16 block_no = parent_inode_entry.Block[0];
+	printf("block: %d\n", parent_inode_entry.Block[0]);
+	ReadBlock(block_no, inode_data);
+	DirEntry *temp = (DirEntry*)inode_data;
+	for (int i = 0; i < no_of_entries; i++){
+		printf("dir after %s\n", temp[i].Filename);
+		printf("inode after: %d\n", temp[i].iNode);
+	}
+	*/
+
+	iNodeEntry child_inode_entry;
+	get_inode_entry(child_inode_no, &child_inode_entry);
+	get_inode_entry(child_inode_no, &child_inode_entry);
+	child_inode_entry.Block[0] = child_inode_block_no;
+	child_inode_entry.iNodeStat.st_ino = child_inode_no;
+	child_inode_entry.iNodeStat.st_nlink = 2;
+	child_inode_entry.iNodeStat.st_blocks = 1;
+	child_inode_entry.iNodeStat.st_size = 2 * sizeof(DirEntry);
+	child_inode_entry.iNodeStat.st_mode = G_IFDIR | G_IRWXU | G_IRWXG;
+	write_inode_on_block(&child_inode_entry);
+
+
+	char data_block[BLOCK_SIZE];
+	ReadBlock(child_inode_block_no, data_block);
+	DirEntry *p_child_entries = (DirEntry*)data_block;
+	strcpy(p_child_entries[0].Filename, ".");
+	p_child_entries[0].iNode = child_inode_no;
+	strcpy(p_child_entries[1].Filename, "..");
+	p_child_entries[1].iNode = inode_found;
+	WriteBlock(child_inode_block_no, data_block);
+
+
+	free(last_dir);
+	free(path);
+	return 0;
 }
 
 int bd_write(const char *pFilename, const char *buffer, int offset, int numbytes) { 
-	return -1;
+
+	if (offset > MAX_FILE_SIZE){
+		return -4;
+	}
+
+	ino inode_found = ROOT_INODE;
+	get_inode_from_filename(pFilename, &inode_found);
+	if (inode_found == -1){
+		return -1;
+	}
+
+	iNodeEntry p_inode_entry;
+	get_inode_entry(inode_found, &p_inode_entry);
+	if (p_inode_entry.iNodeStat.st_mode & G_IFDIR){
+		return -2;
+	}
+	if (p_inode_entry.iNodeStat.st_size <= offset){
+		return -3;
+	}
+
+	char file_data[BLOCK_SIZE];
+	ReadBlock(p_inode_entry.Block[0], file_data);
+
+	char temp[BLOCK_SIZE];
+	for (int i = 0; i < p_inode_entry.iNodeStat.st_size; i++){
+		temp[i] = file_data[i];
+	}
+
+	int bytes = 0;
+	int counter = 0;
+	for (int i = offset; i <= BLOCK_SIZE && i < (offset + numbytes) && counter <= numbytes; i++){
+		if(temp[i] != buffer[counter]){
+			temp[i] = buffer[bytes];
+			bytes++;
+		}
+		counter++;
+		
+	}
+
+	WriteBlock(p_inode_entry.Block[0], temp);
+	if (offset + bytes > p_inode_entry.iNodeStat.st_size){
+		p_inode_entry.iNodeStat.st_size = offset + bytes;
+		printf("%d\n", p_inode_entry.iNodeStat.st_size);
+	}
+
+	write_inode_on_block(&p_inode_entry);
+
+
+	return bytes;
 }
 
 int bd_hardlink(const char *pPathExistant, const char *pPathNouveauLien) {
@@ -450,7 +611,26 @@ int bd_rename(const char *pFilename, const char *pDestFilename) {
 }
 
 int bd_readdir(const char *pDirLocation, DirEntry **ppListeFichiers) {
-	return -1;
+	ino inode_found = ROOT_INODE;
+	get_inode_from_filename(pDirLocation, &inode_found);
+	if (inode_found == -1){
+		return -1;
+	}
+
+	iNodeEntry inode_entry;
+	get_inode_entry(inode_found, &inode_entry);
+	if (!(inode_entry.iNodeStat.st_mode & G_IFDIR)){
+		return -2;
+	}
+
+	char data_block[BLOCK_SIZE];
+	ReadBlock(inode_entry.Block[0], data_block);
+	*ppListeFichiers = (DirEntry*)malloc(inode_entry.iNodeStat.st_size);
+	memcpy(*ppListeFichiers, data_block, inode_entry.iNodeStat.st_size);
+
+	int count = NumberofDirEntry(inode_entry.iNodeStat.st_size);
+
+	return count;
 }
 
 int bd_symlink(const char *pPathExistant, const char *pPathNouveauLien) {
