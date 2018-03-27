@@ -306,12 +306,20 @@ int add_filename_in_directory(char *filename, iNodeEntry* p_inode_entry, ino ino
 	UINT16 size = p_inode_entry->iNodeStat.st_size;
 	int no_of_entries = NumberofDirEntry(size);
 	UINT16 block_no = p_inode_entry->Block[0];
+	printf("block no: %d\n", p_inode_entry->Block[0]);
 	ReadBlock(block_no, data_block);
 	DirEntry *p_dir_entries = (DirEntry*)data_block;
-	p_dir_entries += no_of_entries - 1;
-	p_dir_entries->iNode = inode_no;
-	strcpy(p_dir_entries->Filename, filename);
+	p_dir_entries[no_of_entries - 1].iNode = inode_no;
+	strcpy(p_dir_entries[no_of_entries - 1].Filename, filename);
+	/*
+	for (int i = 0; i < no_of_entries; i++){
+		printf("dir in block: %s\n", p_dir_entries[i].Filename);
+	}
+	*/
+	//printf("dir entry %s\n", p_dir_entries->Filename);
 	WriteBlock(block_no, data_block);
+
+	return 0;
 }
 
 
@@ -386,6 +394,18 @@ int bd_create(const char *pFilename) {
 	iNodeEntry inode_dir_entries;
 	get_inode_entry(last_inode_found, &inode_dir_entries);
 	add_filename_in_directory(filename, &inode_dir_entries, inode_dir);
+
+	/*
+	UINT16 size = inode_dir_entries.iNodeStat.st_size;
+	int no_of_entries = NumberofDirEntry(size);
+	UINT16 block_no = inode_dir_entries.Block[0];
+	ReadBlock(block_no, inode_data);
+	DirEntry *temp = (DirEntry*)inode_data;
+	for (int i = 0; i < no_of_entries; i++){
+		printf("dir after %s\n", temp[i].Filename);
+	}
+	*/
+
 
 	free(dir);
 	free(filename);
