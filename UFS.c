@@ -144,13 +144,7 @@ int release_free_inode(UINT16 inode_no){
 int get_free_inode(){
 	char free_inode_bitmap[BLOCK_SIZE];
 	ReadBlock(FREE_INODE_BITMAP, free_inode_bitmap);
-	int i = 0;
-	int test = 0;
-	while (test < N_INODE_ON_DISK){
-		printf("i: %d ", test);
-		printf("bitmap inode %d\n", free_inode_bitmap[i]);
-		test++;
-	}
+	int i = ROOT_INODE;
 	while (i < N_INODE_ON_DISK && free_inode_bitmap[i] == 0){
 		i++;
 	}
@@ -405,18 +399,6 @@ int bd_create(const char *pFilename) {
 	get_inode_entry(last_inode_found, &inode_dir_entries);
 	add_filename_in_directory(filename, &inode_dir_entries, inode_dir);
 
-	/*
-	UINT16 size = inode_dir_entries.iNodeStat.st_size;
-	int no_of_entries = NumberofDirEntry(size);
-	UINT16 block_no = inode_dir_entries.Block[0];
-	ReadBlock(block_no, inode_data);
-	DirEntry *temp = (DirEntry*)inode_data;
-	for (int i = 0; i < no_of_entries; i++){
-		printf("dir after %s\n", temp[i].Filename);
-	}
-	*/
-
-
 	free(dir);
 	free(filename);
 
@@ -482,7 +464,7 @@ int bd_mkdir(const char *pDirName) {
 	iNodeEntry parent_inode_entry;
 	get_inode_entry(inode_found, &parent_inode_entry);
 
-	if (parent_inode_entry.iNodeStat.st_size >= BLOCK_SIZE){
+	if (parent_inode_entry.iNodeStat.st_size > BLOCK_SIZE){
 		return -4;
 	}
 
@@ -492,20 +474,6 @@ int bd_mkdir(const char *pDirName) {
 	parent_inode_entry.iNodeStat.st_nlink += 1;
 	write_inode_on_block(&parent_inode_entry);
 	add_filename_in_directory(last_dir, &parent_inode_entry, child_inode_no);
-
-	/* gets written well but when ls is launch no dir appears same with create
-	char inode_data[BLOCK_SIZE];
-	UINT16 size = parent_inode_entry.iNodeStat.st_size;
-	int no_of_entries = NumberofDirEntry(size);
-	UINT16 block_no = parent_inode_entry.Block[0];
-	printf("block: %d\n", parent_inode_entry.Block[0]);
-	ReadBlock(block_no, inode_data);
-	DirEntry *temp = (DirEntry*)inode_data;
-	for (int i = 0; i < no_of_entries; i++){
-		printf("dir after %s\n", temp[i].Filename);
-		printf("inode after: %d\n", temp[i].iNode);
-	}
-	*/
 
 	iNodeEntry child_inode_entry;
 	get_inode_entry(child_inode_no, &child_inode_entry);
@@ -551,7 +519,7 @@ int bd_write(const char *pFilename, const char *buffer, int offset, int numbytes
 	if (p_inode_entry.iNodeStat.st_mode & G_IFDIR){
 		return -2;
 	}
-	if (p_inode_entry.iNodeStat.st_size <= offset){
+	if (p_inode_entry.iNodeStat.st_size < offset){
 		return -3;
 	}
 
@@ -589,17 +557,127 @@ int bd_write(const char *pFilename, const char *buffer, int offset, int numbytes
 int bd_hardlink(const char *pPathExistant, const char *pPathNouveauLien) {
 	ino inode_exist = ROOT_INODE;
 	ino inode_new = ROOT_INODE;
+	ino temp_test_if_new_exist = ROOT_INODE;
+	char last_dir_new[BLOCK_SIZE];
+	GetDirFromPath(pPathNouveauLien, last_dir_new);
 	get_inode_from_filename(pPathExistant, &inode_exist);
-	get_inode_from_filename(pPathNouveauLien, &inode_new);
-	return -1;
+	get_inode_from_filename(last_dir_new, &inode_new);
+	get_inode_from_filename(pPathNouveauLien, & temp_test_if_new_exist);
+
+	if (inode_exist == -1){
+		return -1;
+	}
+	if (temp_test_if_new_exist != -1){
+		return -2;
+	}
+
+	iNodeEntry inode_entry_new;
+	iNodeEntry inode_entry_exist;
+	get_inode_entry(inode_new, &inode_entry_new);
+	get_inode_entry(inode_exist, &inode_entry_exist);
+
+	if (inode_entry_exist.iNodeStat.st_mode & G_IFDIR){
+		return -3;
+	}
+	if (inode_entry_new.iNodeStat.st_size >= BLOCK_SIZE){
+		return -4;
+	}
+
+	char data_block[BLOCK_SIZE];
+	char filename_new[FILENAME_SIZE];
+	GetFilenameFromPath(pPathNouveauLien, filename_new);
+
+	ReadBlock(inode_entry_new.Block[0], data_block);
+	DirEntry *p_entry_new = (DirEntry*)data_block;
+	UINT16 no_of_entries = NumberofDirEntry(inode_entry_new.iNodeStat.st_size);
+
+	p_entry_new[no_of_entries].iNode = inode_entry_exist.iNodeStat.st_ino;
+	strcpy(p_entry_new[no_of_entries].Filename, filename_new);
+
+	inode_entry_new.iNodeStat.st_size += sizeof(DirEntry);
+	inode_entry_exist.iNodeStat.st_nlink += 1;
+	WriteBlock(inode_entry_new.Block[0], data_block);
+
+	write_inode_on_block(&inode_entry_new);
+	write_inode_on_block(&inode_entry_exist);
+
+	return 0;
 }
 
 int bd_unlink(const char *pFilename) {
-	return -1;
+	ino inode_found = ROOT_INODE;
+	get_inode_from_filename(pFilename, &inode_found);
+	if (inode_found == -1){
+		return -1;
+	}
+
+	iNodeEntry inode_entry;
+	get_inode_entry(inode_found, &inode_entry);
+	if (inode_entry.iNodeStat.st_mode & G_IFDIR){ //on utilise G_IFDIR puisque le flag pour les sym link sont different que ceux pour les reg file
+		return -2;
+	}
+
+	ino inode_dir = ROOT_INODE;
+	char dir[BLOCK_SIZE];
+	char filename[FILENAME_SIZE];
+	iNodeEntry inode_dir_entry;
+	GetDirFromPath(pFilename, dir);
+	GetFilenameFromPath(pFilename, filename);
+	get_inode_from_filename(dir, &inode_dir);
+	get_inode_entry(inode_dir, &inode_dir_entry);
+
+	char data_block[BLOCK_SIZE];
+	ReadBlock(inode_dir_entry.Block[0], data_block);
+	DirEntry *p_dir_entries = (DirEntry*)data_block;
+	UINT16 no_of_entries = NumberofDirEntry(inode_dir_entry.iNodeStat.st_size);
+	int i;
+	int j;
+	for (int i = 0; i < no_of_entries; i++){
+		if (strcmp(p_dir_entries[i].Filename, filename) == 0){
+			if (i != no_of_entries - 1){
+				for(j = 1; j < no_of_entries - i; j++){
+					p_dir_entries[i + j - 1] = p_dir_entries[i + j];
+				}
+				break;
+			}
+		}
+	}
+
+	WriteBlock(inode_dir_entry.Block[0], data_block);
+	inode_dir_entry.iNodeStat.st_size -= sizeof(DirEntry);
+	write_inode_on_block(&inode_dir_entry);
+
+	inode_entry.iNodeStat.st_nlink -= 1;
+	if (inode_entry.iNodeStat.st_nlink == 0){
+		if (inode_entry.iNodeStat.st_blocks > 0){
+			release_free_block(inode_entry.Block[0]);
+		}
+		release_free_inode(inode_found);
+	}
+	else{
+		write_inode_on_block(&inode_entry);
+	}
+
+
+
+	return 0;
 }
 
 int bd_truncate(const char *pFilename, int NewSize) {
-	return -1;
+	ino inode_found = ROOT_INODE;
+	get_inode_from_filename(pFilename, inode_found);
+	if (inode_found == -1){
+		return -1;
+	}
+
+	iNodeEntry inode_entry;
+	get_inode_entry(inode_found, &inode_entry);
+	if (inode_entry.iNodeStat.st_mode & G_IFDIR){
+		return -2;
+	}
+
+	
+	return 0;
 }
 
 int bd_rmdir(const char *pFilename) {
