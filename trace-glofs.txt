@@ -1,0 +1,101 @@
+etu1@ubuntu:/tmp/glo$ ls
+Bonjour  b.txt  doc  full  rep  slnb.txt
+
+etu1@ubuntu:/tmp/glo$ cd Bonjour
+etu1@ubuntu:/tmp/glo/Bonjour$ ls
+LesAmis.txt
+
+etu1@ubuntu:/tmp/glo$ ls -la
+total 8
+drwxrwx---  6 root root  128 Dec 31  1969 .
+drwxrwxrwt 10 root root 4096 Mar 28 14:44 ..
+drwxrwx---  2 root root   48 Dec 31  1969 Bonjour
+-rwxrwx---  1 root root   29 Dec 31  1969 b.txt
+drwxrwx---  3 root root   48 Dec 31  1969 doc
+drwxrwx---  2 root root  256 Dec 31  1969 full
+drwxrwx---  2 root root   32 Dec 31  1969 rep
+lrwxrwx---  1 root root    5 Dec 31  1969 slnb.txt -> b.txt
+
+etu1@ubuntu:/tmp/glo$ ls -i
+ 4 Bonjour   7 b.txt   2 doc  11 full   3 rep  10 slnb.txt
+
+etu1@ubuntu:/tmp/glo$ mkdir test
+etu1@ubuntu:/tmp/glo$ ls
+Bonjour  b.txt  doc  full  rep  slnb.txt  test
+etu1@ubuntu:/tmp/glo$ ls -la
+total 8
+drwxrwx---  7 root root  144 Dec 31  1969 .
+drwxrwxrwt 10 root root 4096 Mar 28 14:44 ..
+drwxrwx---  2 root root   48 Dec 31  1969 Bonjour
+-rwxrwx---  1 root root   29 Dec 31  1969 b.txt
+drwxrwx---  3 root root   48 Dec 31  1969 doc
+drwxrwx---  2 root root  256 Dec 31  1969 full
+drwxrwx---  2 root root   32 Dec 31  1969 rep
+lrwxrwx---  1 root root    5 Dec 31  1969 slnb.txt -> b.txt
+drwxrwx---  2 root root   32 Dec 31  1969 test
+
+
+etu1@ubuntu:/tmp/glo$ touch test.txt
+touch: setting times of 'test.txt': Function not implemented
+etu1@ubuntu:/tmp/glo$ ls -la
+total 8
+drwxrwx---  7 root root  160 Dec 31  1969 .
+drwxrwxrwt 10 root root 4096 Mar 28 14:44 ..
+drwxrwx---  2 root root   48 Dec 31  1969 Bonjour
+-rwxrwx---  1 root root   29 Dec 31  1969 b.txt
+drwxrwx---  3 root root   48 Dec 31  1969 doc
+drwxrwx---  2 root root  256 Dec 31  1969 full
+drwxrwx---  2 root root   32 Dec 31  1969 rep
+lrwxrwx---  1 root root    5 Dec 31  1969 slnb.txt -> b.txt
+drwxrwx---  2 root root   32 Dec 31  1969 test
+-rwxrwx---  1 root root    0 Dec 31  1969 test.txt
+
+
+etu1@ubuntu:/tmp/glo$ ln b.txt symtest.txt
+etu1@ubuntu:/tmp/glo$ ls -la
+total 9
+drwxrwx---  7 root root  176 Dec 31  1969 .
+drwxrwxrwt 10 root root 4096 Mar 28 14:44 ..
+drwxrwx---  2 root root   48 Dec 31  1969 Bonjour
+-rwxrwx---  2 root root   29 Dec 31  1969 b.txt
+drwxrwx---  3 root root   48 Dec 31  1969 doc
+drwxrwx---  2 root root  256 Dec 31  1969 full
+drwxrwx---  2 root root   32 Dec 31  1969 rep
+lrwxrwx---  1 root root    5 Dec 31  1969 slnb.txt -> b.txt
+-rwxrwx---  2 root root   29 Dec 31  1969 symtest.txt
+drwxrwx---  2 root root   32 Dec 31  1969 test
+-rwxrwx---  1 root root    0 Dec 31  1969 test.txt
+
+
+etu1@ubuntu:/tmp/glo$ ln -s b.txt sym1.txt
+etu1@ubuntu:/tmp/glo$ ls -la
+total 9
+drwxrwx---  6 root root  176 Dec 31  1969 .
+drwxrwxrwt 10 root root 4096 Mar 28 14:44 ..
+drwxrwx---  2 root root   48 Dec 31  1969 Bonjour
+-rwxrwx---  2 root root   29 Dec 31  1969 b.txt
+drwxrwx---  3 root root   48 Dec 31  1969 doc
+drwxrwx---  2 root root  256 Dec 31  1969 full
+lrwxrwx---  1 root root    5 Dec 31  1969 slnb.txt -> b.txt
+lrwxrwx---  1 root root    5 Dec 31  1969 sym1.txt -> b.txt
+-rwxrwx---  2 root root   29 Dec 31  1969 symtest.txt
+drwxrwx---  2 root root   32 Dec 31  1969 test
+-rwxrwx---  1 root root    0 Dec 31  1969 test.txt
+
+
+etu1@ubuntu:/tmp/glo$ rmdir rep
+etu1@ubuntu:/tmp/glo$ ls -la
+total 8
+drwxrwx---  6 root root  160 Dec 31  1969 .
+drwxrwxrwt 10 root root 4096 Mar 28 14:44 ..
+drwxrwx---  2 root root   48 Dec 31  1969 Bonjour
+-rwxrwx---  2 root root   29 Dec 31  1969 b.txt
+drwxrwx---  3 root root   48 Dec 31  1969 doc
+drwxrwx---  2 root root  256 Dec 31  1969 full
+lrwxrwx---  1 root root    5 Dec 31  1969 slnb.txt -> b.txt
+-rwxrwx---  2 root root   29 Dec 31  1969 symtest.txt
+drwxrwx---  2 root root   32 Dec 31  1969 test
+-rwxrwx---  1 root root    0 Dec 31  1969 test.txt
+
+
+
