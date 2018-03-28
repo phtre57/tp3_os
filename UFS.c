@@ -326,6 +326,28 @@ int add_filename_in_directory(char *filename, iNodeEntry* p_inode_entry, ino ino
 	return 0;
 }
 
+int remove_filename_in_directory(iNodeEntry *p_inode_dir, ino inode_no_delete){
+	p_inode_dir->iNodeStat.st_size -= BLOCK_SIZE / sizeof(DirEntry);
+	write_inode_on_block(p_inode_dir);
+
+	char data_block[BLOCK_SIZE];
+	ReadBlock(p_inode_dir->Block[0], data_block);
+	DirEntry *p_dir_entry = (DirEntry*)data_block;
+	int size = NumberofDirEntry(p_inode_dir->iNodeStat.st_size);
+	int my_switch = 0;
+	for (int i = 0; i < size; i++){
+		if (p_dir_entry[i].iNode == inode_no_delete){
+			my_switch = 1;
+		}
+		if (my_switch == 1){
+			p_dir_entry[i] = p_dir_entry[i + 1];
+		}
+	}
+	WriteBlock(p_inode_dir->Block[0], data_block);
+
+	return 0;
+}
+
 
 /*fonction a implementees*/
 
@@ -689,7 +711,39 @@ int bd_truncate(const char *pFilename, int NewSize) {
 }
 
 int bd_rmdir(const char *pFilename) {
-	return -1;
+	ino ino_found = ROOT_INODE;
+	get_inode_from_filename(pFilename, &ino_found);
+
+	if (ino_found == -1){
+		return -1;
+	}
+
+	iNodeEntry inode_entry;
+	get_inode_entry(ino_found, &inode_entry);
+
+	if (!(inode_entry.iNodeStat.st_mode & G_IFDIR)){
+		return -2;
+	}
+
+	if(NumberofDirEntry(inode_entry.iNodeStat.st_size) > 2){
+		return -3;
+	}
+
+	ino dir_inode = ROOT_INODE;
+	char dir[BLOCK_SIZE];
+	GetDirFromPath(pFilename, dir);
+	get_inode_from_filename(dir, &dir_inode);
+	iNodeEntry dir_entry;
+	get_inode_entry(dir_inode, &dir_entry);
+
+	remove_filename_in_directory(&dir_entry, ino_found);
+	dir_entry.iNodeStat.st_nlink -= 1;
+	write_inode_on_block(&dir_entry);
+	release_free_block(inode_entry.Block[0]);
+	release_free_inode(ino_found);
+
+
+	return 0;
 }
 
 int bd_rename(const char *pFilename, const char *pDestFilename) {
