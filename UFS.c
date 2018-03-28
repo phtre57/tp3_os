@@ -107,7 +107,7 @@ int release_free_block(UINT16 block_no){
 	char free_block_bitmap[BLOCK_SIZE];
 	ReadBlock(FREE_BLOCK_BITMAP, free_block_bitmap);
 	free_block_bitmap[block_no] = 1;
-	printf("GLOFS: relache bloque: %d\n", block_no);
+	printf("GLOFS: Relache bloc %d\n", block_no);
 	WriteBlock(FREE_BLOCK_BITMAP, free_block_bitmap);
 	return -1;
 }
@@ -124,7 +124,7 @@ int get_free_block(){
 		return -1;
 	}
 	free_block_bitmap[i] = 0;
-	printf("GlOFS saisie bloque: %d\n", i);
+	printf("GlOFS: Saisie bloc %d\n", i);
 	WriteBlock(FREE_BLOCK_BITMAP, free_block_bitmap);
 	return i;
 
@@ -135,7 +135,7 @@ int release_free_inode(UINT16 inode_no){
 	char free_inode_bitmap[BLOCK_SIZE];
 	ReadBlock(FREE_INODE_BITMAP, free_inode_bitmap);
 	free_inode_bitmap[inode_no] = 1;
-	printf("GLOFS: relache du inode: %d\n", inode_no);
+	printf("GLOFS: Relache i-node %d\n", inode_no);
 	WriteBlock(FREE_INODE_BITMAP, free_inode_bitmap);
 	return -1;
 }
@@ -152,7 +152,7 @@ int get_free_inode(){
 		return -1;
 	}
 	free_inode_bitmap[i] = 0;
-	printf("GlOFS saisie inode: %d\n", i);
+	printf("GlOFS: Saisie i-node %d\n", i);
 	WriteBlock(FREE_INODE_BITMAP, free_inode_bitmap);
 	return i;
 	
@@ -431,7 +431,7 @@ int bd_create(const char *pFilename) {
 	inode_entries.iNodeStat.st_blocks = 0;
 	inode_entries.iNodeStat.st_ino = inode_dir;
 	inode_entries.iNodeStat.st_mode = G_IFREG;
-	inode_entries.iNodeStat.st_mode = inode_entries.iNodeStat.st_mode | G_IRUSR | G_IWUSR | G_IRGRP | G_IWGRP;
+	inode_entries.iNodeStat.st_mode = inode_entries.iNodeStat.st_mode | G_IRWXU | G_IRWXG;
 	write_inode_on_block(&inode_entries);
 	iNodeEntry inode_dir_entries;
 	get_inode_entry(last_inode_found, &inode_dir_entries);
@@ -579,6 +579,15 @@ int bd_write(const char *pFilename, const char *buffer, int offset, int numbytes
 	//offset plus grand que la taille du fichier actuellement
 	if (p_inode_entry.iNodeStat.st_size < offset){
 		return -3;
+	}
+
+	if(p_inode_entry.iNodeStat.st_size == 0 && p_inode_entry.iNodeStat.st_blocks == 0 & numbytes > 0){
+		int block_no = get_free_block();
+		if (block_no == -1){
+			return -10; //il n'y a plus de block dispo
+		}
+		p_inode_entry.Block[0] = block_no;
+		p_inode_entry.iNodeStat.st_blocks += 1;
 	}
 
 	char file_data[BLOCK_SIZE];
@@ -899,10 +908,63 @@ int bd_readdir(const char *pDirLocation, DirEntry **ppListeFichiers) {
 }
 
 int bd_symlink(const char *pPathExistant, const char *pPathNouveauLien) {
-    return -1;
+	char sub_dir[BLOCK_SIZE];
+	ino inode_full_new_path = ROOT_INODE;
+	ino inode_sub_new_dir = ROOT_INODE;
+	ino inode_exist = ROOT_INODE;
+	GetDirFromPath(pPathNouveauLien, sub_dir);
+
+	get_inode_from_filename(sub_dir, &inode_sub_new_dir);
+	get_inode_from_filename(pPathNouveauLien, &inode_full_new_path);
+	get_inode_from_filename(pPathExistant, &inode_exist);
+
+	//sub_dir n'existe pas
+	if (inode_sub_new_dir == -1){
+		return -1;
+	}
+	//pPathNouveauLien existe deja
+	if (inode_full_new_path != -1){
+		return -2;
+	}
+
+	bd_create(pPathNouveauLien);
+	inode_full_new_path = ROOT_INODE;
+	get_inode_from_filename(pPathNouveauLien, &inode_full_new_path);
+
+	iNodeEntry symlink_inode_entry;
+	get_inode_entry(inode_full_new_path, &symlink_inode_entry);
+	symlink_inode_entry.iNodeStat.st_mode |= G_IFLNK | G_IFREG;
+	write_inode_on_block(&symlink_inode_entry);
+	bd_write(pPathNouveauLien, pPathExistant, 0, strlen(pPathExistant));
+
+
+
+    return 0;
 }
 
 int bd_readlink(const char *pPathLien, char *pBuffer, int sizeBuffer) {
-    return -1;
+	ino inode_found = ROOT_INODE;
+	get_inode_from_filename(pPathLien, & inode_found);
+	//path n'existe pas
+	if (inode_found == -1){
+		return -1;
+	}
+
+	iNodeEntry inode_entry;
+	get_inode_entry(inode_found, &inode_entry);
+	//n'est pas un symlink
+	if (!(inode_entry.iNodeStat.st_mode & G_IFLNK)){
+		return -2;
+	}
+
+	char data_block[BLOCK_SIZE];
+	ReadBlock(inode_entry.Block[0], data_block);
+	int count = 0;
+	for (int i = 0; i < inode_entry.iNodeStat.st_size && i < sizeBuffer; i++){
+		pBuffer[i] = data_block[i];
+		count++;
+	}
+
+    return count;
 }
 
