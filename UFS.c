@@ -177,6 +177,7 @@ int get_inode_entry(ino inode_no, iNodeEntry *p_inode_entry){
 	return 0;
 }
 
+/*ecrire de nouvelles entree sur un inode*/
 int write_inode_on_block(iNodeEntry *p_entries){
 	char data_block[BLOCK_SIZE];
 	UINT16 block_no = BASE_BLOCK_INODE + (p_entries->iNodeStat.st_ino / NUM_INODE_PER_BLOCK);
@@ -212,6 +213,7 @@ int read_inode_dir(ino parent_inode, char *sub_path){
 	return -1;
 }
 
+/*get d'un sub path */
 int get_sub_path(char *p_path, char *sub_path){
 	for (int i = 0; i < strlen(p_path); i++){
 		if (p_path[i] != '/'){
@@ -227,7 +229,7 @@ int get_sub_path(char *p_path, char *sub_path){
 	return -1;
 }
 
-
+/*trouver le inode d'un path*/
 int get_inode_from_filename(const char *p_filename, ino *p_inode_no){
 	ino *child_inode = p_inode_no;
 	ino parent = *p_inode_no;
@@ -239,8 +241,8 @@ int get_inode_from_filename(const char *p_filename, ino *p_inode_no){
 
 	//other cases
 	else if (strcmp("/", p_filename) != 0){
-		char *sub_path = malloc(sizeof(char) * BLOCK_SIZE);
-		char *temp_path = malloc(sizeof(char) * FILENAME_SIZE);
+		char *sub_path;
+		char *temp_path = malloc(sizeof(char) * FILENAME_SIZE * 4); //times for because of memory corruption with only one
 		//printf("filename: %s\n", p_filename);
 		int counter = 0;
 		for (int i = 1; i < strlen(p_filename); i++){
@@ -256,6 +258,7 @@ int get_inode_from_filename(const char *p_filename, ino *p_inode_no){
 					//printf("sub here: %s\n", temp_sub_path);
 					*p_inode_no = read_inode_dir(*p_inode_no, temp_sub_path);
 					if (*p_inode_no == -1){
+						free(temp_sub_path);
 						return -1;
 					}
 					free(temp_sub_path); //free here works
@@ -299,9 +302,7 @@ int get_inode_from_filename(const char *p_filename, ino *p_inode_no){
 
 		}
 
-		//memory leak but seg fault when freeing?
-		//free(temp_path);
-		//free(sub_path);
+		
 		return 0;
 
 	}
@@ -309,6 +310,7 @@ int get_inode_from_filename(const char *p_filename, ino *p_inode_no){
 	return -1;
 }
 
+/*on ajoute un filename ou dir sur les dir entry d'un bloque*/
 int add_filename_in_directory(char *filename, iNodeEntry* p_inode_entry, ino inode_no){
 	char data_block[BLOCK_SIZE];
 	p_inode_entry->iNodeStat.st_size += sizeof(DirEntry);
@@ -329,6 +331,7 @@ int add_filename_in_directory(char *filename, iNodeEntry* p_inode_entry, ino ino
 	return 0;
 }
 
+/* enlever un filename ou dir des entry d'un bloque*/
 int remove_filename_in_directory(iNodeEntry *p_inode_dir, ino inode_no_delete){
 	p_inode_dir->iNodeStat.st_size -= BLOCK_SIZE / sizeof(DirEntry);
 	write_inode_on_block(p_inode_dir);
@@ -369,9 +372,11 @@ int bd_countfreeblocks(void) {
 int bd_stat(const char *pFilename, gstat *pStat) {
 	ino inode = ROOT_INODE;
 	iNodeEntry p_inode_entry;
+	//on va chercher le inode du path
 	if (get_inode_from_filename(pFilename, &inode) != 0){
 		return -1;
 	}
+	//on va chercher les entry avec le inode obtenu
 	if (get_inode_entry(inode, &p_inode_entry) != 0){
 		return -1;
 	}
@@ -383,6 +388,7 @@ int bd_stat(const char *pFilename, gstat *pStat) {
 }
 
 int bd_create(const char *pFilename) {
+	//on alloue sur le heap pour eviter les stack overflow
 	char *dir = malloc(sizeof(char)*BLOCK_SIZE);
 	char *filename = malloc(sizeof(char)*FILENAME_SIZE);
 	ino inode_dir = ROOT_INODE;
@@ -415,6 +421,7 @@ int bd_create(const char *pFilename) {
 		return -4;
 	}
 
+	//ajustement sur les stats ud inode
 	GetFilenameFromPath(pFilename, filename);
 	inode_dir = get_free_inode();
 	iNodeEntry inode_entries;
@@ -470,7 +477,7 @@ int bd_read(const char *pFilename, char *buffer, int offset, int numbytes) {
 	}
 
 	free(dir);
-	return bytes;;
+	return bytes;
 }
 
 int bd_mkdir(const char *pDirName) {
@@ -480,12 +487,14 @@ int bd_mkdir(const char *pDirName) {
 	GetDirFromPath(pDirName, path);
 	GetFilenameFromPath(pDirName, last_dir);
 
+	//un dir vide
 	if (strcmp(last_dir, "") == 0){
 		free(last_dir);
 		free(path);
 		return -3;
 	}
 
+	//la dir existe deja
 	get_inode_from_filename(pDirName, &inode_found);
 	if (inode_found != -1){
 		free(last_dir);
@@ -493,6 +502,7 @@ int bd_mkdir(const char *pDirName) {
 		return -2;
 	}
 
+	//la sub_dir existe pas
 	inode_found = ROOT_INODE;
 	get_inode_from_filename(path, &inode_found);
 	if (inode_found == -1){
@@ -504,6 +514,7 @@ int bd_mkdir(const char *pDirName) {
 	iNodeEntry parent_inode_entry;
 	get_inode_entry(inode_found, &parent_inode_entry);
 
+	//full block
 	if (parent_inode_entry.iNodeStat.st_size > BLOCK_SIZE){
 		free(last_dir);
 		free(path);
@@ -517,6 +528,7 @@ int bd_mkdir(const char *pDirName) {
 	write_inode_on_block(&parent_inode_entry);
 	add_filename_in_directory(last_dir, &parent_inode_entry, child_inode_no);
 
+	//ajustement sur les inode stats
 	iNodeEntry child_inode_entry;
 	get_inode_entry(child_inode_no, &child_inode_entry);
 	get_inode_entry(child_inode_no, &child_inode_entry);
@@ -528,7 +540,7 @@ int bd_mkdir(const char *pDirName) {
 	child_inode_entry.iNodeStat.st_mode = G_IFDIR | G_IRWXU | G_IRWXG;
 	write_inode_on_block(&child_inode_entry);
 
-
+	//ajout base dir
 	char data_block[BLOCK_SIZE];
 	ReadBlock(child_inode_block_no, data_block);
 	DirEntry *p_child_entries = (DirEntry*)data_block;
@@ -546,21 +558,25 @@ int bd_mkdir(const char *pDirName) {
 
 int bd_write(const char *pFilename, const char *buffer, int offset, int numbytes) { 
 
+	//offset ne peut etre plus grand que le file size
 	if (offset > MAX_FILE_SIZE){
 		return -4;
 	}
 
+	//file n'existe pas
 	ino inode_found = ROOT_INODE;
 	get_inode_from_filename(pFilename, &inode_found);
 	if (inode_found == -1){
 		return -1;
 	}
 
+	//est une dir
 	iNodeEntry p_inode_entry;
 	get_inode_entry(inode_found, &p_inode_entry);
 	if (p_inode_entry.iNodeStat.st_mode & G_IFDIR){
 		return -2;
 	}
+	//offset plus grand que la taille du fichier actuellement
 	if (p_inode_entry.iNodeStat.st_size < offset){
 		return -3;
 	}
@@ -573,6 +589,7 @@ int bd_write(const char *pFilename, const char *buffer, int offset, int numbytes
 		temp[i] = file_data[i];
 	}
 
+	//ecriture dans le fichier
 	int bytes = 0;
 	int counter = 0;
 	for (int i = offset; i <= BLOCK_SIZE && i < (offset + numbytes) && counter <= numbytes; i++){
@@ -584,10 +601,11 @@ int bd_write(const char *pFilename, const char *buffer, int offset, int numbytes
 		
 	}
 
+	//ajustement si on change la taille du fichier
 	WriteBlock(p_inode_entry.Block[0], temp);
 	if (offset + bytes > p_inode_entry.iNodeStat.st_size){
 		p_inode_entry.iNodeStat.st_size = offset + bytes;
-		printf("%d\n", p_inode_entry.iNodeStat.st_size);
+		//printf("%d\n", p_inode_entry.iNodeStat.st_size);
 	}
 
 	write_inode_on_block(&p_inode_entry);
@@ -606,9 +624,11 @@ int bd_hardlink(const char *pPathExistant, const char *pPathNouveauLien) {
 	get_inode_from_filename(last_dir_new, &inode_new);
 	get_inode_from_filename(pPathNouveauLien, & temp_test_if_new_exist);
 
+	//le path existant n'exsite pas
 	if (inode_exist == -1){
 		return -1;
 	}
+	//le new path existe deja
 	if (temp_test_if_new_exist != -1){
 		return -2;
 	}
@@ -618,9 +638,12 @@ int bd_hardlink(const char *pPathExistant, const char *pPathNouveauLien) {
 	get_inode_entry(inode_new, &inode_entry_new);
 	get_inode_entry(inode_exist, &inode_entry_exist);
 
+	//ce n'est pas un fichier
 	if (inode_entry_exist.iNodeStat.st_mode & G_IFDIR){
 		return -3;
 	}
+
+	//le dir est full
 	if (inode_entry_new.iNodeStat.st_size >= BLOCK_SIZE){
 		return -4;
 	}
@@ -649,6 +672,7 @@ int bd_hardlink(const char *pPathExistant, const char *pPathNouveauLien) {
 int bd_unlink(const char *pFilename) {
 	ino inode_found = ROOT_INODE;
 	get_inode_from_filename(pFilename, &inode_found);
+	//filename donner n'exite pas
 	if (inode_found == -1){
 		return -1;
 	}
@@ -704,21 +728,25 @@ int bd_unlink(const char *pFilename) {
 }
 
 int bd_truncate(const char *pFilename, int NewSize) {
+	//ajustement de new size au max file si celui ci est plus haut que max file size
 	if (NewSize > MAX_FILE_SIZE){
 		NewSize = MAX_FILE_SIZE;
 	}
 	ino inode_found = ROOT_INODE;
 	get_inode_from_filename(pFilename, &inode_found);
+	//filename n'existe pas
 	if (inode_found == -1){
 		return -1;
 	}
 
 	iNodeEntry inode_entry;
 	get_inode_entry(inode_found, &inode_entry);
+	//ce n'est pas un fichier
 	if (inode_entry.iNodeStat.st_mode & G_IFDIR){
 		return -2;
 	}
 
+	//on release un bloque puisque la taille est a zero
 	if (NewSize == 0){
 		release_free_block(inode_entry.Block[0]);
 	}
@@ -732,6 +760,7 @@ int bd_rmdir(const char *pFilename) {
 	ino ino_found = ROOT_INODE;
 	get_inode_from_filename(pFilename, &ino_found);
 
+	//filename n'existe pas
 	if (ino_found == -1){
 		return -1;
 	}
@@ -739,10 +768,12 @@ int bd_rmdir(const char *pFilename) {
 	iNodeEntry inode_entry;
 	get_inode_entry(ino_found, &inode_entry);
 
+	//c'est un fichier regulier
 	if (!(inode_entry.iNodeStat.st_mode & G_IFDIR)){
 		return -2;
 	}
 
+	//on ne peut remove une dir qui a plus de 2 entrees ".", ".."
 	if(NumberofDirEntry(inode_entry.iNodeStat.st_size) > 2){
 		return -3;
 	}
@@ -765,18 +796,22 @@ int bd_rmdir(const char *pFilename) {
 }
 
 int bd_rename(const char *pFilename, const char *pDestFilename) {
+	//meme fichier
 	if (strcmp(pFilename, pDestFilename) == 0){
 		return 0;
 	}
 
+	//si on peut faire un hardlink on le fait
 	int ret = bd_hardlink(pFilename, pDestFilename);
 	if (ret == -1 || ret == -2){
 		return -1;
 	}
 	else if(ret == 0){
+		//si on peut on hardlink on unlink le fichier a rename
 		bd_unlink(pFilename);
 		return 0;
 	}
+	//sinon c'est une dir
 	else{
 		char dest_dir[BLOCK_SIZE];
 		GetDirFromPath(pDestFilename, dest_dir);
@@ -805,28 +840,29 @@ int bd_rename(const char *pFilename, const char *pDestFilename) {
 			return -1;
 		}
 
-		iNodeEntry source_inode_entry;
-		iNodeEntry dest_inode_entry;
-		iNodeEntry full_source_path_entry;
+		iNodeEntry source_entry;
+		iNodeEntry dest_entry;
+		iNodeEntry source_full_entry;
 
-		get_inode_entry(source_inode, &source_inode_entry);
-		remove_filename_in_directory(&source_inode_entry, old_inode);
-		source_inode_entry.iNodeStat.st_nlink -= 1;
-		write_inode_on_block(&source_inode_entry);
+		get_inode_entry(source_inode, &source_entry);
+		remove_filename_in_directory(&source_entry, old_inode);
+		get_inode_entry(source_inode, &source_entry);
+		source_entry.iNodeStat.st_nlink -= 1;
+		write_inode_on_block(&source_entry);
 
-		get_inode_entry(dest_inode, &dest_inode_entry);
-		add_filename_in_directory(new_file, &dest_inode_entry, old_inode);
-		dest_inode_entry.iNodeStat.st_nlink += 1;
-		write_inode_on_block(&dest_inode_entry);
+		get_inode_entry(dest_inode, &dest_entry);
+		add_filename_in_directory(new_file, &dest_entry, old_inode);
+		get_inode_entry(dest_inode, &dest_entry);
+		dest_entry.iNodeStat.st_nlink += 1;
+		write_inode_on_block(&dest_entry);
 
-		get_inode_entry(old_inode, &full_source_path_entry);
+		get_inode_entry(old_inode, &source_full_entry);
 		char data_block[BLOCK_SIZE];
-		ReadBlock(full_source_path_entry.Block[0], data_block);
-		DirEntry *p_dir_entry = (DirEntry*)data_block;
-		p_dir_entry++;
-		p_dir_entry->iNode = dest_inode;
-		WriteBlock(full_source_path_entry.Block[0], data_block);
-
+		ReadBlock(source_full_entry.Block[0], data_block);
+		DirEntry *p_dir = (DirEntry*)data_block;
+		p_dir += 1;
+		p_dir->iNode = dest_inode;
+		WriteBlock(source_full_entry.Block[0], data_block);
 
 		return 0;
 
@@ -840,12 +876,14 @@ int bd_rename(const char *pFilename, const char *pDestFilename) {
 int bd_readdir(const char *pDirLocation, DirEntry **ppListeFichiers) {
 	ino inode_found = ROOT_INODE;
 	get_inode_from_filename(pDirLocation, &inode_found);
+	//la dir n'existe pas
 	if (inode_found == -1){
 		return -1;
 	}
 
 	iNodeEntry inode_entry;
 	get_inode_entry(inode_found, &inode_entry);
+	//c'est un fichier regulier
 	if (!(inode_entry.iNodeStat.st_mode & G_IFDIR)){
 		return -2;
 	}
